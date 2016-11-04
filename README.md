@@ -1,8 +1,13 @@
-# PHP 7
+[PHP 7.1 Reference](https://github.com/tpunt/PHP7-Reference/blob/master/php71-reference.md)
 
-PHP 7 has been slated for release [in November of this year](https://wiki.php.net/rfc/php7timeline)
-(2015). It comes with a number of new features, changes, and backwards
-compatibility breakages that are outlined below.
+---
+
+# PHP 7.0
+
+PHP 7 was released on [December 3rd, 2015]
+(http://php.net/archive/2015.php#id2015-12-03-1). It comes
+with a number of new features, changes, and backwards compatibility breakages
+that are outlined below.
 
 **[Performance](#performance)**
 
@@ -23,6 +28,9 @@ compatibility breakages that are outlined below.
 * [Integer Division with `intdiv()`](#integer-division-with-intdiv)
 * [`session_start()` Options](#session_start-options)
 * [`preg_replace_callback_array()` Function](#preg_replace_callback_array-function)
+* [CSPRNG Functions](#csprng-functions)
+* [Support for Array Constants in `define()`](#support-for-array-constants-in-define)
+* [Reflection Additions](#reflection-additions)
 
 **[Changes](#changes)**
 * [Loosening Reserved Word Restrictions](#loosening-reserved-word-restrictions)
@@ -34,16 +42,20 @@ compatibility breakages that are outlined below.
 * [ZPP Failure on Overflow](#zpp-failure-on-overflow)
 * [Fixes to `foreach()`'s Behaviour](#fixes-to-foreachs-behaviour)
 * [Changes to `list()`'s Behaviour](#changes-to-lists-behaviour)
+* [Changes to Division by Zero Semantics](#changes-to-division-by-zero-semantics)
 * [Fixes to Custom Session Handler Return Values](#fixes-to-custom-session-handler-return-values)
 * [Deprecation of PHP 4-Style Constructors](#deprecation-of-php-4-style-constructors)
 * [Removal of date.timezone Warning](#removal-of-datetimezone-warning)
 * [Removal of Alternative PHP Tags](#removal-of-alternative-php-tags)
 * [Removal of Multiple Default Blocks in Switch Statements](#removal-of-multiple-default-blocks-in-switch-statements)
+* [Removal of Redefinition of Parameters with Duplicate Names](#removal-of-redefinition-of-parameters-with-duplicate-names)
 * [Removal of Dead Server APIs](#removal-of-dead-server-apis)
 * [Removal of Hex Support in Numerical Strings](#removal-of-hex-support-in-numerical-strings)
 * [Removal of Deprecated Functionality](#removal-of-deprecated-functionality)
 * [Reclassification and Removal of E_STRICT Notices](#reclassification-and-removal-of-e_strict-notices)
 * [Deprecation of Salt Option for `password_hash()`](#deprecation-of-salt-option-for-password_hash)
+* [Error on Invalid Octal Literals](#error-on-invalid-octal-literals)
+* [`substr()` Return Value Change](#substr-return-value-change)
 
 **[FAQ](#faq)**
  * [What happened to PHP 6?](#what-happened-to-php-6)
@@ -139,9 +151,10 @@ parameters, but also a function's return type (see [Return Type
 Declarations](#return-type-declarations)), built-in PHP functions, and
 functions from loaded extensions.
 
-If the type-check fails, then an `E_RECOVERABLE_ERROR` is produced. The only
-leniency present in strict typing is the automatic conversion of integers to
-floats (but not vice-versa) when an integer is provided in a float context.
+If the type-check fails, then a `TypeError` exception (see [Exceptions in the
+Engine](#exceptions-in-the-engine)) is thrown. The only leniency present in
+strict typing is the automatic conversion of integers to floats (but not
+vice-versa) when an integer is provided in a float context.
 
 ```PHP
 declare(strict_types=1);
@@ -157,7 +170,7 @@ function add(int $x, int $y)
 }
 
 var_dump(multiply(2, 3.5)); // float(7)
-var_dump(add('2', 3)); // Fatal error: Argument 1 passed to add() must be of the type integer, string given...
+var_dump(add('2', 3)); // Fatal error: Uncaught TypeError: Argument 1 passed to add() must be of the type integer, string given...
 ```
 
 Note that **only** the *invocation context* applies when the type-checking is
@@ -173,10 +186,10 @@ will apply.
 RFC: [Scalar Type Declarations](https://wiki.php.net/rfc/scalar_type_hints_v5)
 
 ### Return Type Declarations
-Return type declarations enable you to specify the return type of a function,
-method, or closure. The following return types are supported: `string`, `int`,
-`float`, `bool`, `array`, `callable`, `self` (methods only), `parent` (methods
-only), `Closure`, the name of a class, and the name of an interface.
+Return type declarations enable for the return type of a function, method, or
+closure to be specified. The following return types are supported: `string`,
+`int`, `float`, `bool`, `array`, `callable`, `self` (methods only), `parent`
+(methods only), `Closure`, the name of a class, and the name of an interface.
 
 ```PHP
 function arraysSum(array ...$arrays): array
@@ -240,14 +253,15 @@ class B implements SomeInterface
 {
     public function test() : A // all good!
     {
-        return null; // not good!
+        return null; // Fatal error: Uncaught TypeError: Return value of B::test() must be an instance of A, null returned...
     }
 }
 ```
 
-This time, the implemented method causes an `E_RECOVERABLE_ERROR` when executed
-because `null` is not a valid return type - only an instance of the class `A`
-can be returned.
+This time, the implemented method causes a `TypeError` exception (see
+[Exceptions in the Engine](#exceptions-in-the-engine)) to be thrown when
+executed. This is because `null` is not a valid return type - only an instance of the
+class `A` can be returned.
 
 RFC: [Return Type Declarations](https://wiki.php.net/rfc/return_types)
 
@@ -345,7 +359,7 @@ RFC: [Anonymous Classes](https://wiki.php.net/rfc/anonymous_classes)
 
 ### Unicode Codepoint Escape Syntax
 
-This enables you to output a UTF-8 encoded unicode codepoint in either a
+This enables a UTF-8 encoded unicode codepoint to be output in either a
 double-quoted string or a heredoc. Any valid codepoint is accepted, with
 leading `0`'s being optional.
 
@@ -410,7 +424,7 @@ echo IntlChar::charName('@'); // COMMERCIAL AT
 var_dump(IntlChar::ispunct('!')); // bool(true)
 ```
 
-In order to use this class, you will need the `Intl` extension installed.
+In order to use this class, the `Intl` extension must be installed.
 
 **BC Breaks**
  - Classes in the global namespace must not be called `IntlChar`.
@@ -430,15 +444,15 @@ void assert (mixed $expression [, mixed $message]);
 
 As with the old API, if `$expression` is a string, then it will be evaluated.
 If the first argument is falsy, then the assertion fails. The second argument
-can either be a plain string (causing an AssertionException to be triggered),
+can either be a plain string (causing an AssertionError to be triggered),
 or a custom exception object containing an error message.
 
 ```PHP
-ini_set("assert.exception", 1);
+ini_set('assert.exception', 1);
 
-class CustomError extends AssertionException {}
+class CustomError extends AssertionError {}
 
-assert(false, new CustomError("Some error message"));
+assert(false, new CustomError('Some error message'));
 ```
 
 With this feature comes two PHP.ini settings (along with their default values):
@@ -596,13 +610,19 @@ RFC: [Introduce session_start() Options](https://wiki.php.net/rfc/session-lock-i
 
 ### `preg_replace_callback_array()` Function
 
-This new function addition enables for code to be written more cleanly when
-using the `preg_replace_callback()` function. Prior to PHP 7, callbacks that
-needed to be executed per regular expression match required the callback
-function (second parameter of `preg_replace_callback()`) to be polluted with
-lots of branching (a hacky method at best). But now, callbacks can be
-registered on a per-regular expression basis using an associative array with
-the regular expression as the key and a callback as the value.
+This new function enables code to be written more cleanly when using the
+`preg_replace_callback()` function. Prior to PHP 7, callbacks that needed to be
+executed per regular expression required the callback function (second
+parameter of `preg_replace_callback()`) to be polluted with lots of branching
+(a hacky method at best).
+
+Now, callbacks can be registered to each regular expression using an associative
+array, where the key is a regular expression and the value is a callback.
+
+Function Signature:
+```
+string preg_replace_callback_array(array $regexesAndCallbacks, string $input);
+```
 
 ```PHP
 $tokenStream = []; // [tokenName, lexeme] pairs
@@ -664,6 +684,94 @@ preg_replace_callback_array(
 
 RFC: [Add preg_replace_callback_array Function](https://wiki.php.net/rfc/preg_replace_callback_array)
 
+### CSPRNG Functions
+
+This feature introduces two new functions for generating cryptographically
+secure integers and strings. They expose simple APIs and are
+platform-independent.
+
+Function signatures:
+```
+string random_bytes(int length);
+int random_int(int min, int max);
+```
+
+Both functions will emit an `Error` exception if a source of sufficient
+randomness cannot be found.
+
+**BC Breaks**
+ - Functions in the global namespace must not be called `random_int` or `random_bytes`.
+
+RFC: [Easy User-land CSPRNG](https://wiki.php.net/rfc/easy_userland_csprng)
+
+### Support for Array Constants in `define()`
+
+The ability to define array constants was introduced in PHP 5.6 using the
+`const` keyword. This ability has now been applied to the `define()` function
+too:
+
+```PHP
+define('ALLOWED_IMAGE_EXTENSIONS', ['jpg', 'jpeg', 'gif', 'png']);
+```
+
+RFC: no RFC available
+
+### Reflection Additions
+
+Two new reflection classes have been introduced in PHP 7. The first is
+`ReflectionGenerator`, which is used for introspection on generators:
+
+```PHP
+class ReflectionGenerator
+{
+    public __construct(Generator $gen)
+    public array getTrace($options = DEBUG_BACKTRACE_PROVIDE_OBJECT)
+    public int getExecutingLine(void)
+    public string getExecutingFile(void)
+    public ReflectionFunctionAbstract getFunction(void)
+    public Object getThis(void)
+    public Generator getExecutingGenerator(void)
+}
+```
+
+The second is `ReflectionType` to better support the scalar and return type
+declaration features:
+
+```PHP
+class ReflectionType
+{
+    public bool allowsNull(void)
+    public bool isBuiltin(void)
+    public string __toString(void)
+}
+```
+
+Also, two new methods have been introduced into `ReflectionParameter`:
+```PHP
+class ReflectionParameter
+{
+    // ...
+    public bool hasType(void)
+    public ReflectionType getType(void)
+}
+```
+
+As well as two new methods in `ReflectionFunctionAbstract`:
+```PHP
+class ReflectionFunctionAbstract
+{
+    // ...
+    public bool hasReturnType(void)
+    public ReflectionType getReturnType(void)
+}
+```
+
+**BC Breaks**
+ - Classes in the global namespace must not be called `ReflectionGenerator` or
+   `ReflectionType`.
+
+RFC: no RFC available
+
 ## Changes
 
 ### Loosening Reserved Word Restrictions
@@ -680,7 +788,7 @@ Project::new('Project Name')->private()->for('purpose here')->with('username her
 
 The only limitation is that the `class` keyword still cannot be used as a
 constant name, otherwise it would conflict with the class name resolution
-syntax of `ClassName::class`.
+syntax (`ClassName::class`).
 
 RFC: [Context Sensitive Lexer](https://wiki.php.net/rfc/context_sensitive_lexer)
 
@@ -700,14 +808,11 @@ foo()() // invoke the return of foo()
 
 // operators on expressions enclosed in ()
 (function () {})() // IIFE syntax from JS
-
-// operator support on dereferencable scalars
-'string'->toUpper(); // call the toUpper() method on the string 'string'
 ```
 
 The ability to arbitrarily combine variable operators came from reversing the
 evaluation semantics of indirect variable, property, and method references. The
-new behaviour is more intuitive and always following a left-to-right evaluation
+new behaviour is more intuitive and always follows a left-to-right evaluation
 order:
 
 ```PHP
@@ -757,6 +862,8 @@ interface Throwable
         |- TypeError extends Error
         |- ParseError extends Error
         |- AssertionError extends Error
+        |- ArithmeticError extends Error
+            |- DivisionByZeroError extends ArithmeticError
 ```
 
 See the [Throwable Interface](#throwable-interface) subsection in the Changes
@@ -789,18 +896,23 @@ interface Throwable
         |- TypeError extends Error
         |- ParseError extends Error
         |- AssertionError extends Error
+        |- ArithmeticError extends Error
+            |- DivisionByZeroError extends ArithmeticError
 ```
 
 The `Throwable` interface is implemented by both `Exception` and `Error` base
 class hierarchies and defines the following contract:
 ```
-final public string getMessage ( void )
-final public mixed getCode ( void )
-final public string getFile ( void )
-final public int getLine ( void )
-final public array getTrace ( void )
-final public string getTraceAsString ( void )
-public string __toString ( void )
+interface Throwable
+{
+    final public string getMessage ( void )
+    final public mixed getCode ( void )
+    final public string getFile ( void )
+    final public int getLine ( void )
+    final public array getTrace ( void )
+    final public string getTraceAsString ( void )
+    public string __toString ( void )
+}
 ```
 
 `Throwable` cannot be implemented by user-defined classes - instead, a custom
@@ -815,7 +927,7 @@ The semantics for some integer-based behaviour has changed in an effort to make
 them more intuitive and platform-independent. Here is a list of those changes:
  - Casting `NAN` and `INF` to an integer will always result in 0
  - Bitwise shifting by a negative number of bits is now disallowed (causes a
-   bool(false) return an emits an E_WARNING)
+   bool(false) return and emits an E_WARNING)
  - Left bitwise shifts by a number of bits beyond the bit width of an integer will always result in 0
  - Right bitwise shifts by a number of bits beyond the bit width of an integer
    will always result in 0 or -1 (sign dependent)
@@ -1002,12 +1114,41 @@ RFC: [Fix list() behavior inconsistency](https://wiki.php.net/rfc/fix_list_behav
 
 RFC: [Abstract syntax tree](https://wiki.php.net/rfc/abstract_syntax_tree)
 
+### Changes to Division by Zero Semantics
+
+Prior to PHP 7, when a divisor was 0 for either the divide (/) or modulus (%) operators,
+an E_WARNING would be emitted and `false` would be returned. This was nonsensical for
+an arithmetic operation to return a boolean in some cases, and so the behaviour has been
+rectified in PHP 7.
+
+The new behaviour causes the divide operator to return a float as either +INF, -INF, or
+NAN. The modulus operator E_WARNING has been removed and (alongside the new `intdiv()`
+function) will throw a `DivisionByZeroError` exception. In addition, the `intdiv()`
+function may also throw an `ArithmeticError` when valid integer arguments are supplied
+that cause an incorrect result (due to integer overflow).
+
+```PHP
+var_dump(3/0); // float(INF) + E_WARNING
+var_dump(0/0); // float(NAN) + E_WARNING
+
+var_dump(0%0); // DivisionByZeroError
+
+intdiv(PHP_INT_MIN, -1); // ArithmeticError
+```
+
+**BC Breaks**
+ - The divide operator will no longer return `false` (which could have been silently coerced
+ to 0 in an arithmetic operation)
+ - The modulus operator will now throw an exception with a 0 divisor instead of returning `false`
+
+RFC: No RFC available
+
 ### Fixes to Custom Session Handler Return Values
 
 When implementing custom session handlers, predicate functions from the
 `SessionHandlerInterface` that expect a `true` or `false` return value did not
 behave as expected. Due to an error in the previous implementation, only a `-1`
-return value was considered false - meaning that any even if the boolean
+return value was considered false - meaning that even if the boolean
 `false` was used to denote a failure, it was taken as a success:
 ```PHP
 <?php
@@ -1091,10 +1232,9 @@ The alternative PHP tags `<%` (and `<%=`), `%>`, `<script language="php">`, and
 `</script>` have now been removed.
 
 **BC Breaks**
- - If your code relied upon these alternative tags, then they need to be
-   updated to either the normal or short opening and closing tags. This can
-either be done manually or automated with [this porting
-script](https://gist.github.com/nikic/74769d74dad8b9ef221b).
+ - Code that relied upon these alternative tags needs to be updated to either
+   the normal or short opening and closing tags. This can either be done
+   manually or automated with [this porting script](https://gist.github.com/nikic/74769d74dad8b9ef221b).
 
 RFC: [Remove alternative PHP tags](https://wiki.php.net/rfc/remove_alternative_php_tags)
 
@@ -1109,6 +1249,29 @@ This (useless) ability has now been removed and causes a fatal error.
    with multiple `default` blocks will now become a fatal error.
 
 RFC: [Make defining multiple default cases in a switch a syntax error](https://wiki.php.net/rfc/switch.default.multiple)
+
+### Removal of Redefinition of Parameters with Duplicate Names
+
+Previously, it was possible to specify parameters with duplicate names within a function definition.
+This ability has now been removed and causes a fatal error.
+
+```PHP
+function foo($version, $version)
+{
+    return $version;
+}
+
+echo foo(5, 7);
+  
+// Pre PHP 7 result
+7
+
+// PHP 7+ result
+Fatal error: Redefinition of parameter $version in /redefinition-of-parameters.php
+```
+
+**BC Breaks**
+ - Function parameters with duplicate name will now become a fatal error.
 
 ### Removal of Dead Server APIs
 
@@ -1193,9 +1356,9 @@ changes removes this error category altogether and either: removes the E_STRICT
 notice, changes it to an E_DEPRECATED if the functionality will be removed in
 future, changes it to an E_NOTICE, or promotes it to an E_WARNING.
 
-**BC BREAKS**
+**BC Breaks**
  - Because E_STRICT is in the lowest severity error category, any error
-   promotions to an E_WARNING may break custom error handlers.
+   promotions to an E_WARNING may break custom error handlers
 
 RFC: [Reclassify E_STRICT notices](https://wiki.php.net/rfc/reclassify_e_strict)
 
@@ -1211,6 +1374,42 @@ creating insecure salts.
 
 RFC: no RFC available
 
+### Error on Invalid Octal Literals
+
+Invalid octal literals will now cause a parse error rather than being
+truncated and silently ignored.
+
+```PHP
+echo 0678; // Parse error:  Invalid numeric literal in...
+```
+
+**BC Breaks**
+ - Any invalid octal literals in code will now cause parse errors
+
+RFC: no RFC available
+
+### `substr()` Return Value Change
+
+`substr()` will now return an empty string instead of `false` when the start
+position of the truncation is equal to the string length:
+```PHP
+var_dump(substr('a', 1));
+
+// Pre PHP 7 result
+bool(false)
+
+// PHP 7+ result
+string(0) ""
+```
+
+`substr()` may still return `false` in other cases, however.
+
+**BC Breaks**
+ - Code that strictly checked for a `bool(false)` return value may now be
+ semantically invalid
+
+RFC: no RFC available
+
 ## FAQ
 
 ### What happened to PHP 6?
@@ -1218,10 +1417,10 @@ RFC: no RFC available
 PHP 6 was the major PHP version that never came to light. It was supposed to
 feature full support for Unicode in the core, but this effort was too ambitious
 with too many complications arising. The predominant reasons why version 6 was
-skipped for this new major version is as follows:
+skipped for this new major version are as follows:
  - **To prevent confusion**. Many resources were written about PHP 6 and much
    of the community knew what was featured in it. PHP 7 is a completely
-different beast with entirely different focusses (specifically on performance)
+different beast with entirely different focuses (specifically on performance)
 and entirely different feature sets. Thus, a version has been skipped to
 prevent any confusion or misconceptions surrounding what PHP 7 is.
  - **To let sleeping dogs lie**. PHP 6 was seen as a failure and a large amount
